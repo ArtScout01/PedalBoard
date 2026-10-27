@@ -1,0 +1,38 @@
+name: Build plugin (Windows + macOS)
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: bash
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DMW_COPY_AFTER_BUILD=OFF 2>&1 | tee configure.log
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel 2>&1 | tee build.log
+      - name: Show errors
+        if: failure()
+        shell: bash
+        run: |
+          echo '### Errors (${{ matrix.os }})' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat configure.log build.log 2>/dev/null | grep -iE "error|fatal|failed" | head -40 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Collect VST3
+        shell: bash
+        run: |
+          mkdir out
+          find build -name "*.vst3" -maxdepth 6 -exec cp -R {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ModeWheel-VST3-${{ runner.os }}
+          path: out
